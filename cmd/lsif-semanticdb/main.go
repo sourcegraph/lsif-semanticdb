@@ -24,9 +24,14 @@ type Stats struct {
 
 type indexer struct {
 	projectRoot string
-	toolInfo    protocol.ToolInfo
-	w           *protocol.Writer
-	id          int
+	// printProgressDots bool
+	toolInfo protocol.ToolInfo
+	w        *protocol.Writer
+
+	// Monikers
+	packageName           string
+	packageVersion        string
+	packageInformationIDs map[string]string
 }
 
 func NewIndexer(
@@ -38,6 +43,9 @@ func NewIndexer(
 		projectRoot: projectRoot,
 		toolInfo:    toolInfo,
 		w:           protocol.NewWriter(w, true),
+
+		// Empty maps
+		packageInformationIDs: map[string]string{},
 	}
 }
 
@@ -167,17 +175,17 @@ func (e *indexer) indexDocument(proID string, document *pb.TextDocument) error {
 		if err != nil {
 			return fmt.Errorf(`emit "textDocument/hover": %v`, err)
 		}
+
+		// TODO - only if public
+		err = e.emitExportMoniker(refResult.resultSetID, key) // TODO - better moniker
+		if err != nil {
+			return fmt.Errorf(`emit moniker": %v`, err)
+		}
 	}
 
 	for _, occurrence := range document.GetOccurrences() {
 		if occurrence.GetRole() != pb.SymbolOccurrence_REFERENCE {
 			continue
-		}
-
-		key := occurrence.GetSymbol()
-		refResult, ok := refResults[key]
-		if !ok {
-			continue // TODO - handle non-local definitions
 		}
 
 		rangeID, err := e.w.EmitRange(convertRange(occurrence.GetRange()))
@@ -186,6 +194,47 @@ func (e *indexer) indexDocument(proID string, document *pb.TextDocument) error {
 		}
 
 		rangeIDs = append(rangeIDs, rangeID)
+
+		//
+		//
+
+		key := occurrence.GetSymbol()
+		refResult, ok := refResults[key]
+		if !ok {
+			//
+			// TODO - should also read all files in the package
+			//
+
+			// If we don't have a definition in this package, emit an import moniker
+			// so that we can correlate it with another dump's LSIF data.
+			err = e.emitImportMoniker(rangeID, key)
+			if err != nil {
+				return fmt.Errorf(`emit moniker": %v`, err)
+			}
+
+			// Emit a reference result edge and create a small set of edges that link
+			// the reference result to the range (and vice versa). This is necessary to
+			// mark this range as a reference to _something_, even though the definition
+			// does not exist in this source code.
+
+			refResultID, err := e.w.EmitReferenceResult()
+			if err != nil {
+				return fmt.Errorf(`emit "referenceResult": %v`, err)
+			}
+
+			_, err = e.w.EmitTextDocumentReferences(rangeID, refResultID)
+			if err != nil {
+				return fmt.Errorf(`emit "textDocument/references": %v`, err)
+			}
+
+			_, err = e.w.EmitItemOfReferences(refResultID, []string{rangeID}, docID)
+			if err != nil {
+				return fmt.Errorf(`emit "item": %v`, err)
+			}
+
+			continue
+		}
+
 		refResult.refIDs = append(refResult.refIDs, rangeID)
 
 		_, err = e.w.EmitNext(rangeID, refResult.resultSetID)
@@ -260,6 +309,56 @@ func convertRange(r *pb.Range) (start protocol.Pos, end protocol.Pos) {
 			Line:      int(r.EndLine),
 			Character: int(r.EndCharacter),
 		}
+}
+
+//
+//
+//
+
+func (i *indexer) ensurePackageInformation(packageName, version string) (string, error) {
+	packageInformationID, ok := i.packageInformationIDs[packageName]
+	if !ok {
+		var err error
+		packageInformationID, err = i.w.EmitPackageInformation(packageName, "TODO", version)
+		if err != nil {
+			return "", err
+		}
+
+		i.packageInformationIDs[packageName] = packageInformationID
+	}
+
+	return packageInformationID, nil
+}
+
+func (i *indexer) emitImportMoniker(sourceID, identifier string) error {
+	// TODO - not sure how to find this
+	return nil
+}
+
+func (i *indexer) emitExportMoniker(sourceID, identifier string) error {
+	packageInformationID, err := i.ensurePackageInformation(i.packageName, i.packageVersion)
+	if err != nil {
+		return err
+	}
+
+	return i.addMonikers("export", identifier, sourceID, packageInformationID)
+}
+
+func (i *indexer) addMonikers(kind string, identifier string, sourceID, packageID string) error {
+	monikerID, err := i.w.EmitMoniker(kind, "TODO", identifier)
+	if err != nil {
+		return err
+	}
+
+	if _, err := i.w.EmitPackageInformationEdge(monikerID, packageID); err != nil {
+		return err
+	}
+
+	if _, err := i.w.EmitMonikerEdge(sourceID, monikerID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 //
