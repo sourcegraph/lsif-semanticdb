@@ -472,9 +472,9 @@ func (i *indexer) getDefAndRefInfo(fi *fileInfo, symbol string) (*defInfo, *refR
 		return def, fi.localRefs[symbol]
 	}
 
-	// TODO - temporary hack to support field assignment
 	keys := []string{symbol}
-	keys = append(keys, strings.Replace(strings.Replace(symbol, "_=", "", -1), "`", "", -1))
+	keys = append(keys, strings.Replace(symbol, ".", "#", -1))                               // pattern matching case class
+	keys = append(keys, strings.Replace(strings.Replace(symbol, "_=", "", -1), "`", "", -1)) // field assignment
 
 	for _, k := range keys {
 		def, ok := i.defs[k]
