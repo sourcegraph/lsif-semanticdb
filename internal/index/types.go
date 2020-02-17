@@ -1,10 +1,24 @@
 package index
 
-// TODO
+import pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
 
-type Thinger struct {
+type fileInfo struct {
+	document    *pb.TextDocument
+	symbols     map[string]*pb.SymbolInformation
+	docID       string
+	defRangeIDs []string
+	useRangeIDs []string
+}
+
+type defInfo struct {
+	docID       string
+	rangeID     string
 	resultSetID string
 	defResultID string
-	defIDs      []string
-	refIDs      []string
+}
+
+type refResultInfo struct {
+	resultSetID string
+	defRangeIDs map[string][]string
+	refRangeIDs map[string][]string
 }

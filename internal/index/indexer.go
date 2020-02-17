@@ -35,12 +35,10 @@ type indexer struct {
 	toolInfo    protocol.ToolInfo
 	w           *protocol.Writer
 
-	// TODO
-	documents  map[string]*pb.TextDocument
-	symbols    map[string]map[string]*pb.SymbolInformation
-	docIDs     map[string]string
-	rangeIDs   map[string][]string
-	refResults map[string]map[string]*Thinger
+	// Type correlation
+	files map[string]*fileInfo      // Keys: document uri
+	defs  map[string]*defInfo       // Keys: symbol key
+	refs  map[string]*refResultInfo // Keys: symbol key
 
 	// Monikers
 	packageName           string
@@ -60,13 +58,9 @@ func NewIndexer(
 		w:           protocol.NewWriter(w, true),
 
 		// Empty maps
-		// TODO - collapse all these guys
-		documents:  map[string]*pb.TextDocument{},
-		symbols:    map[string]map[string]*pb.SymbolInformation{},
-		docIDs:     map[string]string{},
-		rangeIDs:   map[string][]string{},
-		refResults: map[string]map[string]*Thinger{},
-
+		files:                 map[string]*fileInfo{},
+		defs:                  map[string]*defInfo{},
+		refs:                  map[string]*refResultInfo{},
 		packageInformationIDs: map[string]string{},
 	}
 }
@@ -128,9 +122,10 @@ func (i *indexer) loadDatabase(path string) error {
 			symbols[key] = symbol
 		}
 
-		uri := document.GetUri()
-		i.documents[uri] = document
-		i.symbols[uri] = symbols
+		i.files[document.GetUri()] = &fileInfo{
+			document: document,
+			symbols:  symbols,
+		}
 	}
 
 	return nil
@@ -156,54 +151,71 @@ func (i *indexer) index() (*Stats, error) {
 		return nil, fmt.Errorf("index documents: %v", err)
 	}
 
-	for uri := range i.documents {
-		if err := i.indexDbDefs(uri, proID); err != nil {
+	for uri, fi := range i.files {
+		if err := i.indexDbDefs(uri, fi, proID); err != nil {
 			return nil, fmt.Errorf("index defs: %v", err)
 		}
 	}
 
-	for uri := range i.documents {
-		if err := i.indexDbUses(uri, proID); err != nil {
+	for uri, fi := range i.files {
+		if err := i.indexDbUses(uri, fi, proID); err != nil {
 			return nil, fmt.Errorf("index uses: %v", err)
 		}
 	}
 
 	log.Infoln("Linking references...")
 
-	for uri := range i.documents {
-		docID := i.docIDs[uri]
-		refResults := i.refResults[uri]
-		rangeIDs := i.rangeIDs[uri]
+	for _, fi := range i.files {
+		for _, occurrence := range fi.document.GetOccurrences() {
+			if occurrence.GetRole() != pb.SymbolOccurrence_DEFINITION {
+				continue
+			}
 
-		for _, refResult := range refResults {
+			key := occurrence.GetSymbol()
+
 			refResultID, err := i.w.EmitReferenceResult()
 			if err != nil {
 				return nil, fmt.Errorf(`emit "referenceResult": %v`, err)
 			}
 
-			_, err = i.w.EmitTextDocumentReferences(refResult.resultSetID, refResultID)
+			_, err = i.w.EmitTextDocumentReferences(i.refs[key].resultSetID, refResultID)
 			if err != nil {
 				return nil, fmt.Errorf(`emit "textDocument/references": %v`, err)
 			}
 
-			if len(refResult.defIDs) > 0 {
-				_, err = i.w.EmitItemOfDefinitions(refResultID, refResult.defIDs, docID)
+			for docID, rangeIDs := range i.refs[key].defRangeIDs {
+				_, err = i.w.EmitItemOfDefinitions(refResultID, rangeIDs, docID)
 				if err != nil {
 					return nil, fmt.Errorf(`emit "item": %v`, err)
 				}
 			}
 
-			if len(refResult.refIDs) > 0 {
-				_, err = i.w.EmitItemOfReferences(refResultID, refResult.refIDs, docID)
+			for docID, rangeIDs := range i.refs[key].refRangeIDs {
+				_, err = i.w.EmitItemOfReferences(refResultID, rangeIDs, docID)
 				if err != nil {
 					return nil, fmt.Errorf(`emit "item": %v`, err)
 				}
 			}
 		}
 
-		_, err = i.w.EmitContains(docID, rangeIDs)
-		if err != nil {
-			return nil, fmt.Errorf(`emit "contains": %v`, err)
+		if len(fi.defRangeIDs) > 0 || len(fi.useRangeIDs) > 0 {
+			// Deduplicate ranges before emitting a contains edge
+			union := map[string]bool{}
+			for _, id := range fi.defRangeIDs {
+				union[id] = true
+			}
+			for _, id := range fi.useRangeIDs {
+				union[id] = true
+			}
+			allRanges := []string{}
+			for id := range union {
+				allRanges = append(allRanges, id)
+			}
+
+			_, err = i.w.EmitContains(fi.docID, allRanges)
+			if err != nil {
+				return nil, fmt.Errorf(`emit "contains": %v`, err)
+			}
 		}
 	}
 
@@ -213,7 +225,7 @@ func (i *indexer) index() (*Stats, error) {
 func (i *indexer) indexDbDocs(proID string) (err error) {
 	log.Infoln("Emitting documents...")
 
-	for uri := range i.documents {
+	for uri, fi := range i.files {
 		// TODO - how to get real URI?
 		realURI, err := filepath.Abs(uri)
 		if err != nil {
@@ -230,64 +242,94 @@ func (i *indexer) indexDbDocs(proID string) (err error) {
 			return fmt.Errorf(`emit "contains": %v`, err)
 		}
 
-		i.docIDs[uri] = docID
-		i.refResults[uri] = map[string]*Thinger{}
-		i.rangeIDs[uri] = []string{}
+		fi.docID = docID
 	}
 
 	return nil
 }
 
-func (i *indexer) indexDbDefs(uri string, proID string) (err error) {
+func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error) {
 	log.Infoln("Emitting definitions for", uri)
 	defer log.Infoln()
 
-	document := i.documents[uri]
-	symbols := i.symbols[uri]
-
-	for _, occurrence := range document.GetOccurrences() {
+	var rangeIDs []string
+	for _, occurrence := range fi.document.GetOccurrences() {
 		if occurrence.GetRole() != pb.SymbolOccurrence_DEFINITION {
 			continue
 		}
 
 		key := occurrence.GetSymbol()
-		symbol := symbols[key]
+		symbol := fi.symbols[key]
 
-		refResult, ok := i.refResults[uri][key]
+		rangeID, err := i.w.EmitRange(convertRange(occurrence.GetRange()))
+		if err != nil {
+			return fmt.Errorf(`emit "range": %v`, err)
+		}
+		rangeIDs = append(rangeIDs, rangeID)
+
+		refResult, ok := i.refs[key]
 		if !ok {
 			resultSetID, err := i.w.EmitResultSet()
 			if err != nil {
 				return fmt.Errorf(`emit "resultSet": %v`, err)
 			}
 
-			refResult = &Thinger{
+			refResult = &refResultInfo{
 				resultSetID: resultSetID,
-				defIDs:      []string{},
-				refIDs:      []string{},
+				defRangeIDs: map[string][]string{},
+				refRangeIDs: map[string][]string{},
 			}
 
-			i.refResults[uri][key] = refResult
+			i.refs[key] = refResult
 		}
 
-		rangeID, err := i.w.EmitRange(convertRange(occurrence.GetRange()))
-		if err != nil {
-			return fmt.Errorf(`emit "range": %v`, err)
+		if _, ok := refResult.defRangeIDs[fi.docID]; !ok {
+			refResult.defRangeIDs[fi.docID] = []string{}
 		}
-
-		i.rangeIDs[uri] = append(i.rangeIDs[uri], rangeID)
-		refResult.defIDs = append(refResult.defIDs, rangeID)
+		refResult.defRangeIDs[fi.docID] = append(refResult.defRangeIDs[fi.docID], rangeID)
 
 		_, err = i.w.EmitNext(rangeID, refResult.resultSetID)
 		if err != nil {
 			return fmt.Errorf(`emit "next": %v`, err)
 		}
 
-		hoverResultID, err := i.w.EmitHoverResult([]protocol.MarkedString{
+		defResultID, err := i.w.EmitDefinitionResult()
+		if err != nil {
+			return fmt.Errorf(`emit "definitionResult": %v`, err)
+		}
+
+		_, err = i.w.EmitTextDocumentDefinition(refResult.resultSetID, defResultID)
+		if err != nil {
+			return fmt.Errorf(`emit "textDocument/definition": %v`, err)
+		}
+
+		_, err = i.w.EmitItem(defResultID, []string{rangeID}, fi.docID)
+		if err != nil {
+			return fmt.Errorf(`emit "item": %v`, err)
+		}
+
+		i.defs[key] = &defInfo{
+			docID:       fi.docID,
+			rangeID:     rangeID,
+			resultSetID: refResult.resultSetID,
+			defResultID: defResultID,
+		}
+
+		// TODO - add moniker support
+		// TODO - only if public
+		// err = i.emitExportMoniker(refResult.resultSetID, key) // TODO - better moniker
+		// if err != nil {
+		// 	return fmt.Errorf(`emit moniker": %v`, err)
+		// }
+
+		contents := []protocol.MarkedString{
 			{
 				Language: "scala",
 				Value:    symbol.GetDisplayName(), // TODO - construct better text
 			},
-		})
+		}
+
+		hoverResultID, err := i.w.EmitHoverResult(contents)
 		if err != nil {
 			return fmt.Errorf(`emit "hoverResult": %v`, err)
 		}
@@ -297,111 +339,92 @@ func (i *indexer) indexDbDefs(uri string, proID string) (err error) {
 			return fmt.Errorf(`emit "textDocument/hover": %v`, err)
 		}
 
-		// TODO - add moniker support
-		// TODO - only if public
-		// err = i.emitExportMoniker(refResult.resultSetID, key) // TODO - better moniker
-		// if err != nil {
-		// 	return fmt.Errorf(`emit moniker": %v`, err)
-		// }
+		rangeIDs = append(rangeIDs, rangeID)
 	}
 
+	fi.defRangeIDs = append(fi.defRangeIDs, rangeIDs...)
 	return nil
 }
 
-func (i *indexer) indexDbUses(uri string, proID string) (err error) {
+func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error) {
 	log.Infoln("Emitting uses for", uri)
 	defer log.Infoln()
 
-	document := i.documents[uri]
-	docID := i.docIDs[uri]
-
-	for _, occurrence := range document.GetOccurrences() {
+	var rangeIDs []string
+	for _, occurrence := range fi.document.GetOccurrences() {
 		if occurrence.GetRole() != pb.SymbolOccurrence_REFERENCE {
 			continue
+		}
+
+		key := occurrence.GetSymbol()
+		keys := []string{key}
+		// TODO - temporary hack to support field assignment
+		keys = append(keys, strings.Replace(strings.Replace(key, "_=", "", -1), "`", "", -1))
+
+		var def *defInfo
+		var defKey string = ""
+		for _, k := range keys {
+			tmp, ok := i.defs[k]
+			if ok {
+				def = tmp
+				defKey = k
+				break
+			}
 		}
 
 		rangeID, err := i.w.EmitRange(convertRange(occurrence.GetRange()))
 		if err != nil {
 			return fmt.Errorf(`emit "range": %v`, err)
 		}
+		rangeIDs = append(rangeIDs, rangeID)
 
-		i.rangeIDs[uri] = append(i.rangeIDs[uri], rangeID)
+		if def == nil {
+			// TODO - add moniker support
+			// If we don't have a definition in this package, emit an import moniker
+			// so that we can correlate it with another dump's LSIF data.
+			// err = i.emitImportMoniker(rangeID, key)
+			// if err != nil {
+			// 	return fmt.Errorf(`emit moniker": %v`, err)
+			// }
 
-		//
-		//
+			// Emit a reference result edge and create a small set of edges that link
+			// the reference result to the range (and vice versa). This is necessary to
+			// mark this range as a reference to _something_, even though the definition
+			// does not exist in this source code.
 
-		key := occurrence.GetSymbol()
-		refResult, ok := i.refResults[uri][key]
-		if !ok {
-			// TODO - this is real dumb and fragile
-			nextKey := strings.Replace(strings.Replace(key, "_=", "", -1), "`", "", -1)
-			refResult, ok = i.refResults[uri][nextKey]
-			if !ok {
-				// TODO - add moniker support
-				// If we don't have a definition in this package, emit an import moniker
-				// so that we can correlate it with another dump's LSIF data.
-				// err = i.emitImportMoniker(rangeID, key)
-				// if err != nil {
-				// 	return fmt.Errorf(`emit moniker": %v`, err)
-				// }
-
-				// Emit a reference result edge and create a small set of edges that link
-				// the reference result to the range (and vice versa). This is necessary to
-				// mark this range as a reference to _something_, even though the definition
-				// does not exist in this source code.
-
-				refResultID, err := i.w.EmitReferenceResult()
-				if err != nil {
-					return fmt.Errorf(`emit "referenceResult": %v`, err)
-				}
-
-				_, err = i.w.EmitTextDocumentReferences(rangeID, refResultID)
-				if err != nil {
-					return fmt.Errorf(`emit "textDocument/references": %v`, err)
-				}
-
-				_, err = i.w.EmitItemOfReferences(refResultID, []string{rangeID}, docID)
-				if err != nil {
-					return fmt.Errorf(`emit "item": %v`, err)
-				}
-
-				continue
+			refResultID, err := i.w.EmitReferenceResult()
+			if err != nil {
+				return fmt.Errorf(`emit "referenceResult": %v`, err)
 			}
+
+			_, err = i.w.EmitTextDocumentReferences(rangeID, refResultID)
+			if err != nil {
+				return fmt.Errorf(`emit "textDocument/references": %v`, err)
+			}
+
+			_, err = i.w.EmitItemOfReferences(refResultID, []string{rangeID}, fi.docID)
+			if err != nil {
+				return fmt.Errorf(`emit "item": %v`, err)
+			}
+
+			continue
 		}
 
-		refResult.refIDs = append(refResult.refIDs, rangeID)
-
-		_, err = i.w.EmitNext(rangeID, refResult.resultSetID)
+		_, err = i.w.EmitNext(rangeID, def.resultSetID)
 		if err != nil {
 			return fmt.Errorf(`emit "next": %v`, err)
 		}
 
-		//
-		//
-		//
-
-		if refResult.defResultID == "" {
-			defResultID, err := i.w.EmitDefinitionResult()
-			if err != nil {
-				return fmt.Errorf(`emit "definitionResult": %v`, err)
+		refResult := i.refs[defKey]
+		if refResult != nil {
+			if _, ok := refResult.refRangeIDs[fi.docID]; !ok {
+				refResult.refRangeIDs[fi.docID] = []string{}
 			}
-
-			_, err = i.w.EmitTextDocumentDefinition(refResult.resultSetID, defResultID)
-			if err != nil {
-				return fmt.Errorf(`emit "textDocument/definition": %v`, err)
-			}
-
-			refResult.defResultID = defResultID
-
-			_, err = i.w.EmitItem(refResult.defResultID, refResult.defIDs, docID)
-			if err != nil {
-				return fmt.Errorf(`emit "item": %v`, err)
-			}
+			refResult.refRangeIDs[fi.docID] = append(refResult.refRangeIDs[fi.docID], rangeID)
 		}
-
 	}
 
-	// TODO
+	fi.useRangeIDs = append(fi.useRangeIDs, rangeIDs...)
 	return nil
 }
 
