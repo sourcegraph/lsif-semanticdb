@@ -76,7 +76,7 @@ func realMain() error {
 	indexer := index.NewIndexer(
 		semanticdbDir,
 		// noContents,
-		// printProgressDots,
+		printProgressDots,
 		toolInfo,
 		out,
 	)
@@ -93,7 +93,7 @@ func realMain() error {
 		return fmt.Errorf("index: %v", err)
 	}
 
-	log.Printf("%d package(s), %d file(s), %d def(s), %d element(s)", s.NumPkgs, s.NumFiles, s.NumDefs, s.NumElements)
+	log.Printf("%d file(s), %d def(s), %d element(s)", s.NumFiles, s.NumDefs, s.NumElements)
 	log.Println("Processed in", time.Since(start))
 	return nil
 }

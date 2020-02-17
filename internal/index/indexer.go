@@ -23,7 +23,6 @@ type Indexer interface {
 
 // Stats contains statistics of data processed during index.
 type Stats struct {
-	NumPkgs     int
 	NumFiles    int
 	NumDefs     int
 	NumElements int
@@ -31,9 +30,10 @@ type Stats struct {
 
 // indexer keeps track of all information needed to generate an LSIF dump.
 type indexer struct {
-	projectRoot string
-	toolInfo    protocol.ToolInfo
-	w           *protocol.Writer
+	projectRoot       string
+	printProgressDots bool
+	toolInfo          protocol.ToolInfo
+	w                 *protocol.Writer
 
 	// Type correlation
 	files map[string]*fileInfo      // Keys: document uri
@@ -49,13 +49,15 @@ type indexer struct {
 // NewIndexer creates a new Indexer.
 func NewIndexer(
 	projectRoot string,
+	printProgressDots bool,
 	toolInfo protocol.ToolInfo,
 	w io.Writer,
 ) Indexer {
 	return &indexer{
-		projectRoot: projectRoot,
-		toolInfo:    toolInfo,
-		w:           protocol.NewWriter(w, true),
+		projectRoot:       projectRoot,
+		printProgressDots: printProgressDots,
+		toolInfo:          toolInfo,
+		w:                 protocol.NewWriter(w, true),
 
 		// Empty maps
 		files:                 map[string]*fileInfo{},
@@ -154,12 +156,20 @@ func (i *indexer) index() (*Stats, error) {
 	}
 
 	for uri, fi := range i.files {
+		if i.printProgressDots {
+			fmt.Fprintf(os.Stdout, ".")
+		}
+
 		if err := i.indexDbDefs(uri, fi, proID); err != nil {
 			return nil, fmt.Errorf("index defs: %v", err)
 		}
 	}
 
 	for uri, fi := range i.files {
+		if i.printProgressDots {
+			fmt.Fprintf(os.Stdout, ".")
+		}
+
 		if err := i.indexDbUses(uri, fi, proID); err != nil {
 			return nil, fmt.Errorf("index uses: %v", err)
 		}
@@ -168,6 +178,10 @@ func (i *indexer) index() (*Stats, error) {
 	log.Infoln("Linking references...")
 
 	for _, fi := range i.files {
+		if i.printProgressDots {
+			fmt.Fprintf(os.Stdout, ".")
+		}
+
 		for _, occurrence := range fi.document.GetOccurrences() {
 			if occurrence.GetRole() != pb.SymbolOccurrence_DEFINITION {
 				continue
@@ -233,13 +247,26 @@ func (i *indexer) index() (*Stats, error) {
 		}
 	}
 
-	return &Stats{}, nil
+	numDefs := len(i.defs)
+	for _, fi := range i.files {
+		numDefs += len(fi.localDefs)
+	}
+
+	return &Stats{
+		NumFiles:    len(i.files),
+		NumDefs:     numDefs,
+		NumElements: i.w.NumElements(),
+	}, nil
 }
 
 func (i *indexer) indexDbDocs(proID string) (err error) {
 	log.Infoln("Emitting documents...")
 
 	for uri, fi := range i.files {
+		if i.printProgressDots {
+			fmt.Fprintf(os.Stdout, ".")
+		}
+
 		// TODO - how to get real URI?
 		realURI, err := filepath.Abs(uri)
 		if err != nil {
@@ -264,7 +291,6 @@ func (i *indexer) indexDbDocs(proID string) (err error) {
 
 func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error) {
 	log.Infoln("Emitting definitions for", uri)
-	defer log.Infoln()
 
 	var rangeIDs []string
 	for _, occurrence := range fi.document.GetOccurrences() {
@@ -376,7 +402,6 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 
 func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error) {
 	log.Infoln("Emitting uses for", uri)
-	defer log.Infoln()
 
 	var rangeIDs []string
 	for _, occurrence := range fi.document.GetOccurrences() {
