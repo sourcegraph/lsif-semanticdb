@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/sourcegraph/lsif-go/protocol"
@@ -201,38 +202,42 @@ func (e *indexer) indexDocument(proID string, document *pb.TextDocument) error {
 		key := occurrence.GetSymbol()
 		refResult, ok := refResults[key]
 		if !ok {
-			//
-			// TODO - should also read all files in the package
-			//
+			nextKey := strings.Replace(strings.Replace(key, "_=", "", -1), "`", "", -1)
+			refResult, ok = refResults[nextKey]
+			if !ok {
+				//
+				// TODO - should also read all files in the package
+				//
 
-			// If we don't have a definition in this package, emit an import moniker
-			// so that we can correlate it with another dump's LSIF data.
-			err = e.emitImportMoniker(rangeID, key)
-			if err != nil {
-				return fmt.Errorf(`emit moniker": %v`, err)
+				// If we don't have a definition in this package, emit an import moniker
+				// so that we can correlate it with another dump's LSIF data.
+				err = e.emitImportMoniker(rangeID, key)
+				if err != nil {
+					return fmt.Errorf(`emit moniker": %v`, err)
+				}
+
+				// Emit a reference result edge and create a small set of edges that link
+				// the reference result to the range (and vice versa). This is necessary to
+				// mark this range as a reference to _something_, even though the definition
+				// does not exist in this source code.
+
+				refResultID, err := e.w.EmitReferenceResult()
+				if err != nil {
+					return fmt.Errorf(`emit "referenceResult": %v`, err)
+				}
+
+				_, err = e.w.EmitTextDocumentReferences(rangeID, refResultID)
+				if err != nil {
+					return fmt.Errorf(`emit "textDocument/references": %v`, err)
+				}
+
+				_, err = e.w.EmitItemOfReferences(refResultID, []string{rangeID}, docID)
+				if err != nil {
+					return fmt.Errorf(`emit "item": %v`, err)
+				}
+
+				continue
 			}
-
-			// Emit a reference result edge and create a small set of edges that link
-			// the reference result to the range (and vice versa). This is necessary to
-			// mark this range as a reference to _something_, even though the definition
-			// does not exist in this source code.
-
-			refResultID, err := e.w.EmitReferenceResult()
-			if err != nil {
-				return fmt.Errorf(`emit "referenceResult": %v`, err)
-			}
-
-			_, err = e.w.EmitTextDocumentReferences(rangeID, refResultID)
-			if err != nil {
-				return fmt.Errorf(`emit "textDocument/references": %v`, err)
-			}
-
-			_, err = e.w.EmitItemOfReferences(refResultID, []string{rangeID}, docID)
-			if err != nil {
-				return fmt.Errorf(`emit "item": %v`, err)
-			}
-
-			continue
 		}
 
 		refResult.refIDs = append(refResult.refIDs, rangeID)
@@ -365,7 +370,7 @@ func (i *indexer) addMonikers(kind string, identifier string, sourceID, packageI
 // POC Driver
 
 func main() {
-	file, err := os.Create("data.lsif")
+	file, err := os.Create("dump.lsif")
 	if err != nil {
 		panic(err.Error())
 	}
