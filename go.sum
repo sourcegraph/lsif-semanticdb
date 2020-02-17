@@ -32,6 +32,8 @@ github.com/sourcegraph/lsif-go v0.0.0-20200213194216-a69df3e535ef h1:rpOxCMoZBY5
 github.com/sourcegraph/lsif-go v0.0.0-20200213194216-a69df3e535ef/go.mod h1:QlQFZBrICizMcxflC0c+7K7alvAY+TLXeN5z2E0xvVA=
 github.com/sourcegraph/lsif-go v0.0.0-20200217042704-cc3283e23bf8 h1:8nsOUYcYR2RcOcha74cwFN05ii4micktVffh3sENsMw=
 github.com/sourcegraph/lsif-go v0.0.0-20200217042704-cc3283e23bf8/go.mod h1:QlQFZBrICizMcxflC0c+7K7alvAY+TLXeN5z2E0xvVA=
+github.com/sourcegraph/lsif-go v0.0.0-20200217145855-dd301cb0193f h1:vslsWMs90nqCQvP6fX6Zbzo8rz4r75fbB/zS8hbQ+i8=
+github.com/sourcegraph/lsif-go v0.0.0-20200217145855-dd301cb0193f/go.mod h1:QlQFZBrICizMcxflC0c+7K7alvAY+TLXeN5z2E0xvVA=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=

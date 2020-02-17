@@ -7,5 +7,5 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.3.3
 	github.com/google/uuid v1.1.1 // indirect
-	github.com/sourcegraph/lsif-go v0.0.0-20200217042704-cc3283e23bf8
+	github.com/sourcegraph/lsif-go v0.0.0-20200217145855-dd301cb0193f
 )
