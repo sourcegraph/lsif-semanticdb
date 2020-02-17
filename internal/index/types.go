@@ -8,6 +8,8 @@ type fileInfo struct {
 	docID       string
 	defRangeIDs []string
 	useRangeIDs []string
+	localDefs   map[string]*defInfo
+	localRefs   map[string]*refResultInfo
 }
 
 type defInfo struct {

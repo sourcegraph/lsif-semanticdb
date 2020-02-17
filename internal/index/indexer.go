@@ -123,8 +123,10 @@ func (i *indexer) loadDatabase(path string) error {
 		}
 
 		i.files[document.GetUri()] = &fileInfo{
-			document: document,
-			symbols:  symbols,
+			document:  document,
+			symbols:   symbols,
+			localDefs: map[string]*defInfo{},
+			localRefs: map[string]*refResultInfo{},
 		}
 	}
 
@@ -172,25 +174,37 @@ func (i *indexer) index() (*Stats, error) {
 			}
 
 			key := occurrence.GetSymbol()
+			isLocal := strings.HasPrefix(key, "local")
+
+			var refResultInfo *refResultInfo
+			if isLocal {
+				refResultInfo = fi.localRefs[key]
+			} else {
+				refResultInfo = i.refs[key]
+			}
+
+			if refResultInfo == nil {
+				continue
+			}
 
 			refResultID, err := i.w.EmitReferenceResult()
 			if err != nil {
 				return nil, fmt.Errorf(`emit "referenceResult": %v`, err)
 			}
 
-			_, err = i.w.EmitTextDocumentReferences(i.refs[key].resultSetID, refResultID)
+			_, err = i.w.EmitTextDocumentReferences(refResultInfo.resultSetID, refResultID)
 			if err != nil {
 				return nil, fmt.Errorf(`emit "textDocument/references": %v`, err)
 			}
 
-			for docID, rangeIDs := range i.refs[key].defRangeIDs {
+			for docID, rangeIDs := range refResultInfo.defRangeIDs {
 				_, err = i.w.EmitItemOfDefinitions(refResultID, rangeIDs, docID)
 				if err != nil {
 					return nil, fmt.Errorf(`emit "item": %v`, err)
 				}
 			}
 
-			for docID, rangeIDs := range i.refs[key].refRangeIDs {
+			for docID, rangeIDs := range refResultInfo.refRangeIDs {
 				_, err = i.w.EmitItemOfReferences(refResultID, rangeIDs, docID)
 				if err != nil {
 					return nil, fmt.Errorf(`emit "item": %v`, err)
@@ -259,6 +273,7 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 		}
 
 		key := occurrence.GetSymbol()
+		isLocal := strings.HasPrefix(key, "local")
 		symbol := fi.symbols[key]
 
 		rangeID, err := i.w.EmitRange(convertRange(occurrence.GetRange()))
@@ -267,7 +282,14 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 		}
 		rangeIDs = append(rangeIDs, rangeID)
 
-		refResult, ok := i.refs[key]
+		var m map[string]*refResultInfo
+		if isLocal {
+			m = fi.localRefs
+		} else {
+			m = i.refs
+		}
+
+		refResult, ok := m[key]
 		if !ok {
 			resultSetID, err := i.w.EmitResultSet()
 			if err != nil {
@@ -280,7 +302,7 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 				refRangeIDs: map[string][]string{},
 			}
 
-			i.refs[key] = refResult
+			m[key] = refResult
 		}
 
 		if _, ok := refResult.defRangeIDs[fi.docID]; !ok {
@@ -308,11 +330,17 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 			return fmt.Errorf(`emit "item": %v`, err)
 		}
 
-		i.defs[key] = &defInfo{
+		def := &defInfo{
 			docID:       fi.docID,
 			rangeID:     rangeID,
 			resultSetID: refResult.resultSetID,
 			defResultID: defResultID,
+		}
+
+		if isLocal {
+			fi.localDefs[key] = def
+		} else {
+			i.defs[key] = def
 		}
 
 		// TODO - add moniker support
@@ -356,21 +384,7 @@ func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error
 			continue
 		}
 
-		key := occurrence.GetSymbol()
-		keys := []string{key}
-		// TODO - temporary hack to support field assignment
-		keys = append(keys, strings.Replace(strings.Replace(key, "_=", "", -1), "`", "", -1))
-
-		var def *defInfo
-		var defKey string = ""
-		for _, k := range keys {
-			tmp, ok := i.defs[k]
-			if ok {
-				def = tmp
-				defKey = k
-				break
-			}
-		}
+		def, refResult := i.getDefAndRefInfo(fi, occurrence.GetSymbol())
 
 		rangeID, err := i.w.EmitRange(convertRange(occurrence.GetRange()))
 		if err != nil {
@@ -415,7 +429,6 @@ func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error
 			return fmt.Errorf(`emit "next": %v`, err)
 		}
 
-		refResult := i.refs[defKey]
 		if refResult != nil {
 			if _, ok := refResult.refRangeIDs[fi.docID]; !ok {
 				refResult.refRangeIDs[fi.docID] = []string{}
@@ -426,6 +439,26 @@ func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error
 
 	fi.useRangeIDs = append(fi.useRangeIDs, rangeIDs...)
 	return nil
+}
+
+func (i *indexer) getDefAndRefInfo(fi *fileInfo, symbol string) (*defInfo, *refResultInfo) {
+	def, ok := fi.localDefs[symbol]
+	if ok {
+		return def, fi.localRefs[symbol]
+	}
+
+	// TODO - temporary hack to support field assignment
+	keys := []string{symbol}
+	keys = append(keys, strings.Replace(strings.Replace(symbol, "_=", "", -1), "`", "", -1))
+
+	for _, k := range keys {
+		def, ok := i.defs[k]
+		if ok {
+			return def, i.refs[k]
+		}
+	}
+
+	return nil, nil
 }
 
 // func (i *indexer) ensurePackageInformation(packageName, version string) (string, error) {
