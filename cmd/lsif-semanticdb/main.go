@@ -1,4 +1,4 @@
-// The program lsif-go is an LSIF indexer for Go.
+// The program lsif-semanticdb converts SemanticDB files into LSIF indexes.
 package main
 
 import (
@@ -68,7 +68,7 @@ func realMain() error {
 	}
 
 	toolInfo := protocol.ToolInfo{
-		Name:    "lsif-go",
+		Name:    "lsif-semanticdb",
 		Version: version,
 		Args:    os.Args[1:],
 	}
