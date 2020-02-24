@@ -22,4 +22,7 @@ $ lsif-semanticdb --semanticdbDir target/scala-2.12/classes/META-INF/semanticdb
 Processed in 489.327697ms
 ```
 
+It is expected that the `lsif-semanticdb` command be run from the repository root. Invoking it from a different directory may result in a
+mismatch of document URIs that will make paths unresolvable in the Sourcegraph instance at query time.
+
 Use `lsif-semanticdb --help` for more information.
