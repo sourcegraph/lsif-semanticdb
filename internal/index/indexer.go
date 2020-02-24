@@ -136,7 +136,6 @@ func (i *indexer) loadDatabase(path string) error {
 }
 
 func (i *indexer) index() (*Stats, error) {
-	// TODO - how to get real URI?
 	realURI, err := filepath.Abs(".")
 	if err != nil {
 		return nil, fmt.Errorf("get abspath of project root: %v", err)
@@ -267,7 +266,6 @@ func (i *indexer) indexDbDocs(proID string) (err error) {
 			fmt.Fprintf(os.Stdout, ".")
 		}
 
-		// TODO - how to get real URI?
 		realURI, err := filepath.Abs(uri)
 		if err != nil {
 			return fmt.Errorf("get abspath of document uri: %v", err)
@@ -369,17 +367,10 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID string) (err error
 			i.defs[key] = def
 		}
 
-		// TODO - add moniker support
-		// TODO - only if public
-		// err = i.emitExportMoniker(refResult.resultSetID, key) // TODO - better moniker
-		// if err != nil {
-		// 	return fmt.Errorf(`emit moniker": %v`, err)
-		// }
-
 		contents := []protocol.MarkedString{
 			{
 				Language: "scala",
-				Value:    symbol.GetDisplayName(), // TODO - construct better text
+				Value:    symbol.GetDisplayName(),
 			},
 		}
 
@@ -418,19 +409,6 @@ func (i *indexer) indexDbUses(uri string, fi *fileInfo, proID string) (err error
 		rangeIDs = append(rangeIDs, rangeID)
 
 		if def == nil {
-			// TODO - add moniker support
-			// If we don't have a definition in this package, emit an import moniker
-			// so that we can correlate it with another dump's LSIF data.
-			// err = i.emitImportMoniker(rangeID, key)
-			// if err != nil {
-			// 	return fmt.Errorf(`emit moniker": %v`, err)
-			// }
-
-			// Emit a reference result edge and create a small set of edges that link
-			// the reference result to the range (and vice versa). This is necessary to
-			// mark this range as a reference to _something_, even though the definition
-			// does not exist in this source code.
-
 			refResultID, err := i.w.EmitReferenceResult()
 			if err != nil {
 				return fmt.Errorf(`emit "referenceResult": %v`, err)
@@ -485,49 +463,3 @@ func (i *indexer) getDefAndRefInfo(fi *fileInfo, symbol string) (*defInfo, *refR
 
 	return nil, nil
 }
-
-// func (i *indexer) ensurePackageInformation(packageName, version string) (string, error) {
-// 	packageInformationID, ok := i.packageInformationIDs[packageName]
-// 	if !ok {
-// 		var err error
-// 		packageInformationID, err = i.w.EmitPackageInformation(packageName, "TODO", version)
-// 		if err != nil {
-// 			return "", err
-// 		}
-
-// 		i.packageInformationIDs[packageName] = packageInformationID
-// 	}
-
-// 	return packageInformationID, nil
-// }
-
-// func (i *indexer) emitImportMoniker(sourceID, identifier string) error {
-// 	// TODO - not sure how to find this
-// 	return nil
-// }
-
-// func (i *indexer) emitExportMoniker(sourceID, identifier string) error {
-// 	packageInformationID, err := i.ensurePackageInformation(i.packageName, i.packageVersion)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return i.addMonikers("export", identifier, sourceID, packageInformationID)
-// }
-
-// func (i *indexer) addMonikers(kind string, identifier string, sourceID, packageID string) error {
-// 	monikerID, err := i.w.EmitMoniker(kind, "TODO", identifier)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	if _, err := i.w.EmitPackageInformationEdge(monikerID, packageID); err != nil {
-// 		return err
-// 	}
-
-// 	if _, err := i.w.EmitMonikerEdge(sourceID, monikerID); err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
