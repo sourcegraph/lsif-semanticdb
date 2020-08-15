@@ -1,4 +1,4 @@
-# SemanticDB to LSIF converter
+# SemanticDB to LSIF converter ![](https://img.shields.io/badge/status-development-yellow)
 
 Visit https://lsif.dev/ to learn about LSIF.
 
