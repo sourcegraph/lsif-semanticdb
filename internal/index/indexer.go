@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 	"github.com/sourcegraph/lsif-go/protocol"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
@@ -220,6 +221,10 @@ func (i *indexer) index() (*Stats, error) {
 	numDefs := len(i.defs)
 	for _, fi := range i.files {
 		numDefs += len(fi.localDefs)
+	}
+
+	if err := i.w.Flush(); err != nil {
+		return nil, errors.Wrap(err, "emitter.Flush")
 	}
 
 	return &Stats{
