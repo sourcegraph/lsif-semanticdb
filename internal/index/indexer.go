@@ -10,7 +10,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/sourcegraph/lsif-go/protocol"
+	protocol "github.com/sourcegraph/lsif-protocol"
+	"github.com/sourcegraph/lsif-protocol/writer"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
 )
@@ -34,7 +35,7 @@ type indexer struct {
 	projectRoot       string
 	printProgressDots bool
 	toolInfo          protocol.ToolInfo
-	w                 *protocol.Emitter
+	w                 *writer.Emitter
 
 	// Type correlation
 	files map[string]*fileInfo      // Keys: document uri
@@ -58,7 +59,7 @@ func NewIndexer(
 		projectRoot:       projectRoot,
 		printProgressDots: printProgressDots,
 		toolInfo:          toolInfo,
-		w:                 protocol.NewEmitter(NewJSONWriter(w)),
+		w:                 writer.NewEmitter(NewJSONWriter(w)),
 
 		// Empty maps
 		files:                 map[string]*fileInfo{},

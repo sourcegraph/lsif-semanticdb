@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/sourcegraph/lsif-go/protocol"
+	protocol "github.com/sourcegraph/lsif-protocol"
 	"github.com/sourcegraph/lsif-semanticdb/internal/index"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
 )

@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/sourcegraph/lsif-go/protocol"
+	protocol "github.com/sourcegraph/lsif-protocol"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
 )
 

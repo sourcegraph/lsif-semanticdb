@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/sourcegraph/lsif-go/protocol"
+	"github.com/sourcegraph/lsif-protocol/writer"
 )
 
 type jsonWriter struct {
@@ -14,13 +14,13 @@ type jsonWriter struct {
 	err            error
 }
 
-var _ protocol.JSONWriter = &jsonWriter{}
+var _ writer.JSONWriter = &jsonWriter{}
 
 // writerBufferSize is the size of the buffered writer wrapping output to the target file.
 const writerBufferSize = 4096
 
 // NewJSONWriter creates a new JSONWriter wrapping the given writer.
-func NewJSONWriter(w io.Writer) protocol.JSONWriter {
+func NewJSONWriter(w io.Writer) writer.JSONWriter {
 	bufferedWriter := bufio.NewWriterSize(w, writerBufferSize)
 
 	return &jsonWriter{

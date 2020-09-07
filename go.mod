@@ -4,9 +4,11 @@ go 1.13
 
 require (
 	github.com/alecthomas/kingpin v2.2.6+incompatible
+	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
+	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.4.2
-	github.com/google/uuid v1.1.1 // indirect
-	github.com/sourcegraph/lsif-go v1.0.1-0.20200821184037-4f9c627318d1
+	github.com/pkg/errors v0.9.1
+	github.com/sourcegraph/lsif-protocol v1.0.0
 	google.golang.org/protobuf v1.25.0 // indirect
 )
