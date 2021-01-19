@@ -32,7 +32,7 @@ type Stats struct {
 
 // indexer keeps track of all information needed to generate an LSIF dump.
 type indexer struct {
-	projectRoot       string
+	projectRoot       []string
 	printProgressDots bool
 	toolInfo          protocol.ToolInfo
 	w                 *writer.Emitter
@@ -50,7 +50,7 @@ type indexer struct {
 
 // NewIndexer creates a new Indexer.
 func NewIndexer(
-	projectRoot string,
+	projectRoot []string,
 	printProgressDots bool,
 	toolInfo protocol.ToolInfo,
 	w io.Writer,
@@ -84,22 +84,23 @@ func (i *indexer) Index() (*Stats, error) {
 
 func (i *indexer) loadDatabases() error {
 	log.Infoln("Loading semanticdb data...")
-
-	err := filepath.Walk(i.projectRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() && strings.HasSuffix(path, ".semanticdb") {
-			if err := i.loadDatabase(path); err != nil {
-				return fmt.Errorf("load database %s: %v", path, err)
+	for _, projectRoot := range i.projectRoot {
+		err := filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
-		}
 
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("load databases: %v", err)
+			if !info.IsDir() && strings.HasSuffix(path, ".semanticdb") {
+				if err := i.loadDatabase(path); err != nil {
+					return fmt.Errorf("load database %s: %v", path, err)
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("load databases: %v", err)
+		}
 	}
 
 	return nil

@@ -10,5 +10,6 @@ require (
 	github.com/golang/protobuf v1.4.2
 	github.com/pkg/errors v0.9.1
 	github.com/sourcegraph/lsif-protocol v1.0.0
+	github.com/sourcegraph/src-cli v0.0.0-20210115142024-761c534fc617 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect
 )
