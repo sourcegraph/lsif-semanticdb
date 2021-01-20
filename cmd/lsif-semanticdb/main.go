@@ -25,17 +25,17 @@ func main() {
 
 func realMain() error {
 	var (
-		debug         bool
-		verbose       bool
-		semanticdbDir string
-		noContents    bool
-		outFile       string
+		debug          bool
+		verbose        bool
+		semanticdbDirs []string
+		noContents     bool
+		outFile        string
 	)
 
 	app := kingpin.New("lsif-semanticdb", "lsif-semanticdb is an LSIF indexer for SemanticDB.").Version(versionString)
 	app.Flag("debug", "Display debug information.").Default("false").BoolVar(&debug)
 	app.Flag("verbose", "Display verbose information.").Short('v').Default("false").BoolVar(&verbose)
-	app.Flag("semanticdbDir", "Specifies the directory of the META-INF/semanticdb directory.").Required().StringVar(&semanticdbDir)
+	app.Flag("semanticdbDir", "Specifies the directory of the META-INF/semanticdb directory.").Required().StringsVar(&semanticdbDirs)
 	app.Flag("noContents", "File contents will not be embedded into the dump.").Default("false").BoolVar(&noContents)
 	app.Flag("out", "The output file the dump is saved to.").Default("dump.lsif").StringVar(&outFile)
 
@@ -62,9 +62,11 @@ func realMain() error {
 
 	defer out.Close()
 
-	semanticdbDir, err = filepath.Abs(semanticdbDir)
-	if err != nil {
-		return fmt.Errorf("get abspath of SemanticDB dir: %v", err)
+	for i, dir := range semanticdbDirs {
+		semanticdbDirs[i], err = filepath.Abs(dir)
+		if err != nil {
+			return fmt.Errorf("get abspath of SemanticDB dir: %v", err)
+		}
 	}
 
 	toolInfo := protocol.ToolInfo{
@@ -74,7 +76,7 @@ func realMain() error {
 	}
 
 	indexer := index.NewIndexer(
-		semanticdbDir,
+		semanticdbDirs,
 		// noContents,
 		printProgressDots,
 		toolInfo,

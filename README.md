@@ -15,7 +15,8 @@ from the source of your project. This will create a `META-INF/semanticdb` direct
 files to LSIF by providing the converter with the path to the generated directory.
 
 ```
-$ lsif-semanticdb --semanticdbDir target/scala-2.12/classes/META-INF/semanticdb
+$ lsif-semanticdb --semanticdbDir core/target/scala-2.12/classes/META-INF/semanticdb \
+                  --semanticdbDir lib/target/scala-2.12/classes/META-INF/semanticdb # Optionally pass in multiple --semanticdbDir
 .....................................................
 
 97 file(s), 3565 def(s), 89839 element(s)
