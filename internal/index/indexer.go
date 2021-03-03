@@ -328,6 +328,12 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID uint64) (err error
 			},
 		}
 
+		if symbol.GetDocumentation() != "" {
+			contents = append(contents, protocol.MarkedString{
+				Value: symbol.GetDocumentation(),
+			})
+		}
+
 		hoverResultID := i.w.EmitHoverResult(contents)
 		_ = i.w.EmitTextDocumentHover(refResult.resultSetID, hoverResultID)
 		rangeIDs = append(rangeIDs, rangeID)

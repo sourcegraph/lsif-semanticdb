@@ -274,6 +274,7 @@ message SymbolInformation {
   Signature signature = 17;
   repeated Annotation annotations = 13;
   Access access = 18;
+  string documentation = 20;
 }
 
 message Annotation {
