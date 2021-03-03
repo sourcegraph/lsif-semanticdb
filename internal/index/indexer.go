@@ -316,9 +316,14 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID uint64) (err error
 			i.defs[key] = def
 		}
 
+		var language string
+		if symbol.GetLanguage() != pb.Language_UNKNOWN_LANGUAGE {
+			language = strings.ToLower(symbol.GetLanguage().String())
+		}
+
 		contents := []protocol.MarkedString{
 			{
-				Language: "scala",
+				Language: language,
 				Value:    symbol.GetDisplayName(),
 			},
 		}
