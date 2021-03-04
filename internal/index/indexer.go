@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
 	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol/writer"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 const LanguageScala = "scala"
