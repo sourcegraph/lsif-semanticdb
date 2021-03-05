@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
-	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol/writer"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
+	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
+	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol/writer"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -317,8 +317,9 @@ func (i *indexer) indexDbDefs(uri string, fi *fileInfo, proID uint64) (err error
 		}
 
 		var language string
-		if symbol.GetLanguage() != pb.Language_UNKNOWN_LANGUAGE {
-			language = strings.ToLower(symbol.GetLanguage().String())
+
+		if fi.document.GetLanguage() != pb.Language_UNKNOWN_LANGUAGE {
+			language = strings.ToLower(fi.document.GetLanguage().String())
 		}
 
 		contents := []protocol.MarkedString{
