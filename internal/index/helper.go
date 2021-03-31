@@ -1,8 +1,8 @@
 package index
 
 import (
-	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
 	pb "github.com/sourcegraph/lsif-semanticdb/internal/proto"
+	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
 )
 
 func convertRange(r *pb.Range) (start protocol.Pos, end protocol.Pos) {

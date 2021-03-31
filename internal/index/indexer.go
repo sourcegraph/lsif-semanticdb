@@ -3,7 +3,6 @@ package index
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,7 +106,7 @@ func (i *indexer) loadDatabases() error {
 }
 
 func (i *indexer) loadDatabase(path string) error {
-	contents, err := ioutil.ReadFile(path)
+	contents, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}

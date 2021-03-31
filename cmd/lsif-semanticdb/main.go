@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
 	"github.com/sourcegraph/lsif-semanticdb/internal/index"
 	"github.com/sourcegraph/lsif-semanticdb/internal/log"
+	"github.com/sourcegraph/sourcegraph/enterprise/lib/codeintel/lsif/protocol"
 )
 
 const version = "0.4.1"
